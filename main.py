@@ -4,7 +4,6 @@ from torchvision import models, transforms
 from torchvision.models import ResNet50_Weights
 from PIL import Image
 import streamlit as st
-from matplotlib import pyplot as plt
 import numpy as np
 
 CLASS_NAMES = [
@@ -41,7 +40,6 @@ class CarClassifierResNet(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-
 @st.cache_resource
 def load_model():
     model = CarClassifierResNet()
@@ -51,21 +49,15 @@ def load_model():
     model.eval()
     return model
 
-
-# -----------------------------------
-# Image Display (NO normalization)
-# -----------------------------------
-def preprocess_for_display(image_file):
-    """Convert image for display without prediction preprocessing"""
-    image = Image.open(image_file).convert("RGB")
-    # Simply resize the image for display
-    image = image.resize((224, 224))
-    return image
-
-
-def predict(image_file):
-    image = Image.open(image_file).convert("RGB")
-
+def process_image(uploaded_image):
+    """Process uploaded image once and return both display and tensor versions"""
+    # Read the image once
+    image = Image.open(uploaded_image).convert("RGB")
+    
+    # Create display version
+    display_image = image.resize((224, 224))
+    
+    # Create tensor version for prediction
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -74,19 +66,20 @@ def predict(image_file):
             std=[0.229, 0.224, 0.225],
         ),
     ])
+    
+    image_tensor = transform(image).unsqueeze(0)
+    
+    return display_image, image_tensor
 
-    image_tensor = transform(image).unsqueeze(0)  # (1, 3, 224, 224)
-
-    model = load_model()
-
+def predict(image_tensor, model):
+    """Make prediction from image tensor"""
     with torch.no_grad():
         logits = model(image_tensor)
         probs = torch.softmax(logits, dim=1)
         pred_idx = probs.argmax(dim=1).item()
         confidence = probs[0, pred_idx].item()
-
-    return CLASS_NAMES[pred_idx], confidence
-
+        
+    return CLASS_NAMES[pred_idx], confidence, probs
 
 # -----------------------------------
 # Streamlit UI
@@ -100,47 +93,49 @@ uploaded_image = st.file_uploader(
 )
 
 if uploaded_image is not None:
-    # Display the uploaded image
-    display_image = preprocess_for_display(uploaded_image)
-
-    # Create two columns for layout
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.image(display_image, caption="Uploaded Image", use_column_width=True)
-
-    # Make prediction
-    label, confidence = predict(uploaded_image)
-
-    with col2:
-        st.markdown("### Prediction Results")
-        st.success(f"**Class:** {label}")
-        st.info(f"**Confidence:** {confidence:.2%}")
-
-        # Optional: Show confidence for all classes
-        st.markdown("### All Class Probabilities:")
-
-        # We need to recalculate all probabilities
-        image = Image.open(uploaded_image).convert("RGB")
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225],
-            ),
-        ])
-        image_tensor = transform(image).unsqueeze(0)
+    try:
+        # Process image once
+        display_image, image_tensor = process_image(uploaded_image)
+        
+        # Load model
         model = load_model()
-
-        with torch.no_grad():
-            logits = model(image_tensor)
-            probs = torch.softmax(logits, dim=1)
-
-        # Display probabilities for all classes
-        for i, class_name in enumerate(CLASS_NAMES):
-            prob = probs[0, i].item()
-            st.progress(prob, text=f"{class_name}: {prob:.2%}")
+        
+        # Make prediction
+        label, confidence, all_probs = predict(image_tensor, model)
+        
+        # Create two columns for layout
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.image(display_image, caption="Uploaded Image", use_column_width=True)
+        
+        with col2:
+            st.markdown("### Prediction Results")
+            st.success(f"**Class:** {label}")
+            st.info(f"**Confidence:** {confidence:.2%}")
+            
+            # Show confidence for all classes
+            st.markdown("### All Class Probabilities:")
+            
+            # Display probabilities for all classes
+            for i, class_name in enumerate(CLASS_NAMES):
+                prob = all_probs[0, i].item()
+                # Create a colored bar with text
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    # Highlight the predicted class
+                    if class_name == label:
+                        st.markdown(f"**{class_name}**")
+                        st.progress(prob)
+                    else:
+                        st.text(class_name)
+                        st.progress(prob)
+                with col_b:
+                    st.text(f"{prob:.2%}")
+                    
+    except Exception as e:
+        st.error(f"Error processing image: {str(e)}")
+        st.info("Please try uploading a different image or check the file format.")
 
 else:
     st.info("Please upload a car image to begin.")
