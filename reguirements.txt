@@ -1,0 +1,7 @@
+torch==2.7.1+cu126
+torchaudio==2.7.1+cu126
+torchvision==0.22.1+cu126
+streamlit==1.52.2
+Pillow==11.2.1
+matplotlib==3.10.3
+matplotlib-inline==0.1.7
