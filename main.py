@@ -50,14 +50,11 @@ def load_model():
     return model
 
 def process_image(uploaded_image):
-    """Process uploaded image once and return both display and tensor versions"""
-    # Read the image once
     image = Image.open(uploaded_image).convert("RGB")
     
-    # Create display version
+
     display_image = image.resize((224, 224))
     
-    # Create tensor version for prediction
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -72,7 +69,6 @@ def process_image(uploaded_image):
     return display_image, image_tensor
 
 def predict(image_tensor, model):
-    """Make prediction from image tensor"""
     with torch.no_grad():
         logits = model(image_tensor)
         probs = torch.softmax(logits, dim=1)
@@ -81,9 +77,7 @@ def predict(image_tensor, model):
         
     return CLASS_NAMES[pred_idx], confidence, probs
 
-# -----------------------------------
-# Streamlit UI
-# -----------------------------------
+
 st.set_page_config(page_title="Car Damage Detection", layout="centered")
 st.title("🚗 Car Damage Detection")
 
@@ -94,16 +88,14 @@ uploaded_image = st.file_uploader(
 
 if uploaded_image is not None:
     try:
-        # Process image once
+
         display_image, image_tensor = process_image(uploaded_image)
         
-        # Load model
+
         model = load_model()
-        
-        # Make prediction
+
         label, confidence, all_probs = predict(image_tensor, model)
         
-        # Create two columns for layout
         col1, col2 = st.columns(2)
         
         with col1:
@@ -114,16 +106,12 @@ if uploaded_image is not None:
             st.success(f"**Class:** {label}")
             st.info(f"**Confidence:** {confidence:.2%}")
             
-            # Show confidence for all classes
             st.markdown("### All Class Probabilities:")
-            
-            # Display probabilities for all classes
+
             for i, class_name in enumerate(CLASS_NAMES):
                 prob = all_probs[0, i].item()
-                # Create a colored bar with text
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
-                    # Highlight the predicted class
                     if class_name == label:
                         st.markdown(f"**{class_name}**")
                         st.progress(prob)
